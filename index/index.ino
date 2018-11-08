@@ -1,13 +1,17 @@
 #define MH_Z19_RX 5
 #define MH_Z19_TX 4
+#define DHT_PIN 13
+#define DHT_VERSION DHT22
 #define MAX_DATA_ERRORS 15 //max of errors, reset after them
 #define INTERVAL 5000
 
 #include <SoftwareSerial.h>
+#include <DHT.h> // https://github.com/adafruit/DHT-sensor-library
 
 long previousMillis = 0;
 int errorCount = 0;
 SoftwareSerial co2Serial(MH_Z19_RX, MH_Z19_TX); // define MH-Z19
+DHT dht(DHT_PIN, DHT_VERSION);//define temperature and humidity sensor
 
 void(* resetFunc) (void) = 0; //declare reset function @ address 0
 
@@ -16,7 +20,8 @@ void setup() {
   Serial.println("Setup started");
 
   unsigned long previousMillis = millis();
-  co2Serial.begin(9600); //Init sensor MH-Z19(14)
+  co2Serial.begin(9600); //Init sensor MH-Z19
+  dht.begin();
 }
 
 void loop()
@@ -44,12 +49,22 @@ void loop()
     Serial.println("PPM not valid");
     dataError = true;
   }
-  else
-  {
-    Serial.println("PPM=" + String(ppm));
-  }
   int mem = ESP.getFreeHeap();
   Serial.println("  Free RAM: " + String(mem));
+
+  float h = dht.readHumidity();
+  float t = dht.readTemperature();
+
+  Serial.print("  Humidity = ");
+  Serial.print(h, 1);
+  Serial.print(", Temp = ");
+  Serial.println(t, 1);
+
+  // Check if any reads failed and exit early (to try again).
+  if (isnan(h) || isnan(t)) {
+    Serial.println("Failed to read from DHT sensor!");
+    dataError = true;
+  }
 
   if (dataError)
   {
@@ -63,12 +78,17 @@ void loop()
   Serial.println("");
 }
 
+/**
+ * Read from CO2 sensor
+ * if error was occurred then -1 will be returned
+ * @return int PPM
+ */
 int readCO2()
 {
-
-    byte cmd[9] = {0xFF, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79};
     // command to ask for data
-    byte response[9]; // for answer
+    byte cmd[9] = {0xFF, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79};
+    // for answer
+    byte response[9];
 
     co2Serial.write(cmd, 9); //request PPM CO2
 
