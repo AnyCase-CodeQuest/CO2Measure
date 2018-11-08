@@ -4,9 +4,13 @@
 #define DHT_VERSION DHT22
 #define MAX_DATA_ERRORS 15 //max of errors, reset after them
 #define INTERVAL 5000
+#define BLYNK_TOKEN "073fa089fbed404dbb1fbfc209b3811e"
 
 #include <SoftwareSerial.h>
 #include <DHT.h> // https://github.com/adafruit/DHT-sensor-library
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266_SSL.h>
+#include "wifiCreds.h"
 
 long previousMillis = 0;
 int errorCount = 0;
@@ -22,11 +26,12 @@ void setup() {
   unsigned long previousMillis = millis();
   co2Serial.begin(9600); //Init sensor MH-Z19
   dht.begin();
+  Blynk.begin(BLYNK_TOKEN, WIFI_SSID, WIFI_PWD);
 }
 
 void loop()
 {
-
+  Blynk.run();
   unsigned long currentMillis = millis();
   if (currentMillis - previousMillis < INTERVAL)
     return;
@@ -43,6 +48,7 @@ void loop()
   int ppm = readCO2();
   bool dataError = false;
   Serial.println("  PPM = " + String(ppm));
+  Blynk.virtualWrite(V5, ppm);
 
   if (ppm < 100 || ppm > 6000)
   {
@@ -54,6 +60,9 @@ void loop()
 
   float h = dht.readHumidity();
   float t = dht.readTemperature();
+
+  Blynk.virtualWrite(V6, t);
+  Blynk.virtualWrite(V7, h);
 
   Serial.print("  Humidity = ");
   Serial.print(h, 1);
