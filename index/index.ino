@@ -10,7 +10,7 @@
 #include <DHT.h> // https://github.com/adafruit/DHT-sensor-library
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266_SSL.h>
-#include "wifiCreds.h"
+#include "wifiCreds.h.dist"
 
 long previousMillis = 0;
 int errorCount = 0;

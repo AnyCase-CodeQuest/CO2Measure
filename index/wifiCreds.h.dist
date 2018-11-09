@@ -1,0 +1,6 @@
+//
+// Created by Mikalai Sahnouski on 11/9/18.
+//
+
+#define WIFI_SSID "MyHomeWifiName"
+#define WIFI_PWD "MyPassword"
