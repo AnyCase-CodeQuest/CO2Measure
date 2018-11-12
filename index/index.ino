@@ -1,21 +1,29 @@
 #define MH_Z19_RX 5
 #define MH_Z19_TX 4
+#define MH_Z19_K 0.400000
 #define DHT_PIN 13
 #define DHT_VERSION DHT22
-#define MAX_DATA_ERRORS 15 //max of errors, reset after them
 #define INTERVAL 5000
+#define MAX_DATA_ERRORS 15
 #define BLYNK_TOKEN "073fa089fbed404dbb1fbfc209b3811e"
 
 #include <SoftwareSerial.h>
 #include <DHT.h> // https://github.com/adafruit/DHT-sensor-library
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266_SSL.h>
-#include "wifiCreds.h.dist"
+#include "wifiCreds.h"
+#include <MHZ19.h>
 
-long previousMillis = 0;
-int errorCount = 0;
+unsigned long _time = 0;
+
 SoftwareSerial co2Serial(MH_Z19_RX, MH_Z19_TX); // define MH-Z19
+MHZ19 mhz(&co2Serial);
 DHT dht(DHT_PIN, DHT_VERSION);//define temperature and humidity sensor
+
+char _command[255];
+byte _idx = 0;
+bool _readCommand = false;
+byte errorCount = 0;
 
 void(* resetFunc) (void) = 0; //declare reset function @ address 0
 
@@ -24,110 +32,129 @@ void setup() {
   Serial.println("Setup started");
 
   unsigned long previousMillis = millis();
-  co2Serial.begin(9600); //Init sensor MH-Z19
+  
   dht.begin();
+  co2Serial.begin(9600);
   Blynk.begin(BLYNK_TOKEN, WIFI_SSID, WIFI_PWD);
 }
 
-void loop()
+void checkErrors()
 {
-  Blynk.run();
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis < INTERVAL)
-    return;
-  previousMillis = currentMillis;
-  Serial.println("loop started");
-
-  if (errorCount > MAX_DATA_ERRORS)
+  uint8_t wst = WiFi.status();
+  Serial.println("WIFI status:");
+  Serial.println(wst);
+  if (errorCount > MAX_DATA_ERRORS || wst != WL_CONNECTED)
   {
     Serial.println("Too many errors, resetting");
     delay(2000);
     resetFunc();
   }
-  Serial.println("reading data:");
-  int ppm = readCO2();
-  bool dataError = false;
-  Serial.println("  PPM = " + String(ppm));
-  Blynk.virtualWrite(V5, ppm);
+}
 
-  if (ppm < 100 || ppm > 6000)
-  {
-    Serial.println("PPM not valid");
-    dataError = true;
-  }
-  int mem = ESP.getFreeHeap();
-  Serial.println("  Free RAM: " + String(mem));
-
+bool readDHT()
+{
   float h = dht.readHumidity();
   float t = dht.readTemperature();
-
-  Blynk.virtualWrite(V6, t);
-  Blynk.virtualWrite(V7, h);
-
-  Serial.print("  Humidity = ");
-  Serial.print(h, 1);
-  Serial.print(", Temp = ");
-  Serial.println(t, 1);
-
   // Check if any reads failed and exit early (to try again).
   if (isnan(h) || isnan(t)) {
     Serial.println("Failed to read from DHT sensor!");
-    dataError = true;
-  }
-
-  if (dataError)
-  {
-    Serial.println("Skipping loop");
     errorCount++;
-    return;
+    return false;
   }
-  errorCount = 0;
-
-  Serial.println("loop finished");
-  Serial.println("");
+  Blynk.virtualWrite(V6, t);
+  Blynk.virtualWrite(V7, h);
+  return true;
 }
 
-/**
- * Read from CO2 sensor
- * if error was occurred then -1 will be returned
- * @return int PPM
- */
-int readCO2()
+bool readMHZ()
 {
-    // command to ask for data
-    byte cmd[9] = {0xFF, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79};
-    // for answer
-    byte response[9];
+  MHZ19_RESULT response = mhz.retrieveData();
+  if (response == MHZ19_RESULT_OK)
+  {
+    Serial.print(F("CO2: "));
+    int ppm = mhz.getCO2();
+    Serial.println(ppm);
+    Serial.println(ppm * MH_Z19_K);
+    Serial.print(F("Temperature: "));
+    Serial.println(mhz.getTemperature());
+    Serial.print(F("Accuracy: "));
+    Serial.println(mhz.getAccuracy());
+    Blynk.virtualWrite(V5, ppm);
+  } else
+  {
+    Serial.print(F("Error, code: "));
+    Serial.println(response);
+    errorCount++;
+    return false;
+  }
+  Serial.println();
+  
+  return true;
+}
 
-    co2Serial.write(cmd, 9); //request PPM CO2
+void loop()
+{
+  Blynk.run();
 
-    // The serial stream can get out of sync. The response starts with 0xff, try to resync.
-    while (co2Serial.available() > 0 && (unsigned char)co2Serial.peek() != 0xFF) {
-        co2Serial.read();
-    }
+  unsigned long ms = millis();
 
-    memset(response, 0, 9);
-    co2Serial.readBytes(response, 9);
+  if (ms - _time > 15000 || _time > ms)
+  {
+    _time = ms;
+    bool mhz = readMHZ();
+    bool dht = readDHT();
+    checkErrors();
+  }
 
-    if (response[1] != 0x86)
+  errorCount = 0;
+  while (Serial.available() > 0)
+  {
+    char c = Serial.read();
+    if (c == 13)
     {
-        Serial.println("Invalid response from co2 sensor!");
-        return -1;
+      continue;
     }
+    else if (c == 10)
+    {
+      _command[_idx] = '\0';
+      _readCommand = true;
+      _idx = 0;
+    }
+    else
+    {
+      _command[_idx] = c;
+      _idx++;
+    }
+  }
 
-    byte crc = 0;
-    for (int i = 1; i < 8; i++) {
-        crc += response[i];
+  if (_readCommand)
+  {
+    _readCommand = false;
+    
+    if (strcmp(_command, "calibrate") == 0)
+    {
+      Serial.println(F("Calibration..."));
+      mhz.calibrateZero();
     }
-    crc = 255 - crc + 1;
-
-    if (response[8] == crc) {
-        int responseHigh = (int) response[2];
-        int responseLow = (int) response[3];
-        int ppm = (256 * responseHigh) + responseLow;
-        return ppm;
-    } else {
-        Serial.println("CRC error!");
-        return -1;
+    if (strcmp(_command, "range2000") == 0)
+    {
+      Serial.println(F("Set range 2000..."));
+      mhz.setRange(MHZ19_RANGE_2000);
     }
+    if (strcmp(_command, "range5000") == 0)
+    {
+      Serial.println(F("Set range 5000..."));
+      mhz.setRange(MHZ19_RANGE_5000);
+    }
+    if (strcmp(_command, "autoCOn") == 0)
+    {
+      Serial.println(F("Set auto calibration ON..."));
+      mhz.setAutoCalibration(true);
+    }
+    if (strcmp(_command, "autoCOff") == 0)
+    {
+      Serial.println(F("Set auto calibration OFF..."));
+      mhz.setAutoCalibration(false);
+    }
+  }
 }
