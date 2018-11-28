@@ -5,22 +5,22 @@
 #define DHT_VERSION DHT22
 #define INTERVAL 5000
 #define MAX_DATA_ERRORS 15
-#define BLYNK_TOKEN "073fa089fbed404dbb1fbfc209b3811e"
 
 #include <SoftwareSerial.h>
 #include <DHT.h> // https://github.com/adafruit/DHT-sensor-library
 #include <ESP8266WiFi.h>
-#include <BlynkSimpleEsp8266_SSL.h>
 #include "wifiCreds.h"
 #include <MHZ19.h>
+#include "HttpGateway.cpp"
 
 unsigned long _time = 0;
 
 SoftwareSerial co2Serial(MH_Z19_RX, MH_Z19_TX); // define MH-Z19
 MHZ19 mhz(&co2Serial);
 DHT dht(DHT_PIN, DHT_VERSION);//define temperature and humidity sensor
+HttpGateway gw;
 
-char _command[255];
+char _command[100];
 byte _idx = 0;
 bool _readCommand = false;
 byte errorCount = 0;
@@ -35,7 +35,19 @@ void setup() {
   
   dht.begin();
   co2Serial.begin(9600);
-  Blynk.begin(BLYNK_TOKEN, WIFI_SSID, WIFI_PWD);
+  setupWifi(WIFI_SSID, WIFI_PWD);
+}
+
+void setupWifi(char * ssid, char * pwd)
+{
+    WiFi.begin(ssid, pwd);   //WiFi connection
+
+    while (WiFi.status() != WL_CONNECTED) {  //Wait for the WiFI connection completion
+
+        delay(500);
+        Serial.println("Waiting for connection");
+
+    }
 }
 
 void checkErrors()
@@ -61,8 +73,10 @@ bool readDHT()
     errorCount++;
     return false;
   }
-  Blynk.virtualWrite(V6, t);
-  Blynk.virtualWrite(V7, h);
+  gw.setTemperature(t);
+  gw.setHumidity(h);
+//  Blynk.virtualWrite(V6, t);
+//  Blynk.virtualWrite(V7, h);
   return true;
 }
 
@@ -79,7 +93,8 @@ bool readMHZ()
     Serial.println(mhz.getTemperature());
     Serial.print(F("Accuracy: "));
     Serial.println(mhz.getAccuracy());
-    Blynk.virtualWrite(V5, ppm);
+    gw.setCo2(ppm);
+//    Blynk.virtualWrite(V5, ppm);
   } else
   {
     Serial.print(F("Error, code: "));
@@ -88,14 +103,12 @@ bool readMHZ()
     return false;
   }
   Serial.println();
-  
+
   return true;
 }
 
 void loop()
 {
-  Blynk.run();
-
   unsigned long ms = millis();
 
   if (ms - _time > 15000 || _time > ms)
@@ -103,6 +116,7 @@ void loop()
     _time = ms;
     bool mhz = readMHZ();
     bool dht = readDHT();
+    gw.run(&errorCount);
     checkErrors();
   }
 
@@ -130,7 +144,7 @@ void loop()
   if (_readCommand)
   {
     _readCommand = false;
-    
+
     if (strcmp(_command, "calibrate") == 0)
     {
       Serial.println(F("Calibration..."));

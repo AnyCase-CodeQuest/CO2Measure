@@ -27,3 +27,12 @@ Accuracy: ± (50ppm+3% reading value)
 
 # Arduino IDE
 We need to import ESP8266 board from that URL: http://arduino.esp8266.com/stable/package_esp8266com_index.json
+
+# REST backend
+Each push
+``
+   curl -X POST "http://climate.any-case.info:1000/api/OfficeClimateSensors"
+   -H  "accept: application/json"
+   -H  "Content-Type: application/json"
+   -d "{  \"deviceId\": \"fa238a69-03ab-40d1-a51c-eb384844d243\",  \"cO2\": 3,  \"temperature\": 0,  \"humidity\": 0}"
+``
