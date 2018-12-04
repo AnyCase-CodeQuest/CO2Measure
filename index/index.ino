@@ -5,10 +5,13 @@
 #define DHT_VERSION DHT22
 #define INTERVAL 5000
 #define MAX_DATA_ERRORS 15
+#define VERSION "0.0.1"
+#define URL_UPDATE "https://co2.sahnovsky.life/co2.bin"
 
 #include <SoftwareSerial.h>
 #include <DHT.h> // https://github.com/adafruit/DHT-sensor-library
 #include <ESP8266WiFi.h>
+#include <ESP8266httpUpdate.h>
 #include "wifiCreds.h"
 #include <MHZ19.h>
 #include "HttpGateway.cpp"
@@ -24,6 +27,7 @@ char _command[100];
 byte _idx = 0;
 bool _readCommand = false;
 byte errorCount = 0;
+byte updCount = 0;
 
 void(* resetFunc) (void) = 0; //declare reset function @ address 0
 
@@ -46,7 +50,6 @@ void setupWifi(char * ssid, char * pwd)
 
         delay(500);
         Serial.println("Waiting for connection");
-
     }
 }
 
@@ -75,8 +78,6 @@ bool readDHT()
   }
   gw.setTemperature(t);
   gw.setHumidity(h);
-//  Blynk.virtualWrite(V6, t);
-//  Blynk.virtualWrite(V7, h);
   return true;
 }
 
@@ -94,7 +95,6 @@ bool readMHZ()
     Serial.print(F("Accuracy: "));
     Serial.println(mhz.getAccuracy());
     gw.setCo2(ppm);
-//    Blynk.virtualWrite(V5, ppm);
   } else
   {
     Serial.print(F("Error, code: "));
@@ -118,9 +118,39 @@ void loop()
     bool dht = readDHT();
     gw.run(&errorCount);
     checkErrors();
+
+    if (updCount == 254) {
+      updCount = 0;
+      checkUpdates();
+    } else {
+      updCount++;
+    }
   }
 
   errorCount = 0;
+  commandProcessing();
+}
+
+void checkUpdates()
+{
+    t_httpUpdate_return ret = ESPhttpUpdate.update(URL_UPDATE, VERSION, "fingerprint"); //@todo change fingerprint
+    switch (ret) {
+        case HTTP_UPDATE_FAILED:
+            Serial.printf("HTTP_UPDATE_FAILD Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+            break;
+
+        case HTTP_UPDATE_NO_UPDATES: //code 304
+            Serial.println("HTTP_UPDATE_NO_UPDATES");
+            break;
+
+        case HTTP_UPDATE_OK:
+            Serial.println("HTTP_UPDATE_OK");
+            break;
+    }
+}
+
+void commandProcessing()
+{
   while (Serial.available() > 0)
   {
     char c = Serial.read();
