@@ -15,22 +15,24 @@
 class HttpGateway {
 private:
     unsigned short co2 = -1;
-    char h = -1;
-    float c = -128;
+    float h = -1;
+    float c = -128.0;
 
     const char * getJsonString() {
         char szBuffer[255];
         snprintf(szBuffer, sizeof(szBuffer), JSON_PATTERN, DEVICE_ID, this->co2, this->c, this->h);
+        Serial.print("debug JSON: ");
+        Serial.println(szBuffer);
         return szBuffer;
     }
 
 public:
 
-    void setTemperature(signed char temp) {
+    void setTemperature(float temp) {
         this->c = temp;
     }
 
-    void setHumidity(signed char humidity) {
+    void setHumidity(float humidity) {
         this->h = humidity;
     }
 
@@ -48,7 +50,9 @@ public:
         int httpCode = http.POST(this->getJsonString());   //Send the request
         String payload = http.getString();                  //Get the response payload
 
+        Serial.print("HTTP return code: ");
         Serial.println(httpCode);   //Print HTTP return code
+        Serial.print("request response payload: ");
         Serial.println(payload);    //Print request response payload
         if (httpCode != 200) {
             errorCount++;

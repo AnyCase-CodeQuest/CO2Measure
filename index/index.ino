@@ -6,14 +6,14 @@
 #define INTERVAL 5000
 #define MAX_DATA_ERRORS 15
 #define VERSION "0.0.1"
-#define URL_UPDATE "https://co2.sahnovsky.life/co2.bin"
+#define URL_UPDATE "http://co2.sahnovsky.life/co2.bin"
 
 #include <SoftwareSerial.h>
 #include <DHT.h> // https://github.com/adafruit/DHT-sensor-library
 #include <ESP8266WiFi.h>
 #include <ESP8266httpUpdate.h>
 #include "wifiCreds.h"
-#include <MHZ19.h>
+#include <MHZ19.h> //https://github.com/strange-v/MHZ19
 #include "HttpGateway.cpp"
 
 unsigned long _time = 0;
@@ -76,6 +76,13 @@ bool readDHT()
     errorCount++;
     return false;
   }
+
+  Serial.print(F("Temperature DHT: "));
+  Serial.println(t);
+
+  Serial.print(F("Humidity DHT: "));
+  Serial.println(h);
+  
   gw.setTemperature(t);
   gw.setHumidity(h);
   return true;
@@ -133,7 +140,7 @@ void loop()
 
 void checkUpdates()
 {
-    t_httpUpdate_return ret = ESPhttpUpdate.update(URL_UPDATE, VERSION, "fingerprint"); //@todo change fingerprint
+    t_httpUpdate_return ret = ESPhttpUpdate.update(URL_UPDATE, VERSION);
     switch (ret) {
         case HTTP_UPDATE_FAILED:
             Serial.printf("HTTP_UPDATE_FAILD Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
