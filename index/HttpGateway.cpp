@@ -5,6 +5,10 @@
 #include "HttpGateway.h"
 #include <stdio.h>
 #include <ESP8266HTTPClient.h>
+#include <WiFiClientSecureBearSSL.h>
+
+// SHA1 fingerprint from browser about certificate
+const uint8_t fingerprint[20] = {0x9D, 0x91, 0x1E, 0x60, 0xAB, 0x38, 0x2B, 0xE1, 0x8A, 0x23, 0x67, 0xAF, 0x1B, 0x9C, 0x96, 0xAC, 0x2E, 0x36, 0xE1, 0x25};
 
 /**
  * curl -X POST "http://climate.any-case.info:1000/api/OfficeClimateSensors"
@@ -39,9 +43,10 @@ public:
     }
 
     void run(byte * errorCount) {
+        std::unique_ptr<BearSSL::WiFiClientSecure>client(new BearSSL::WiFiClientSecure);
         HTTPClient http;    //Declare object of class HTTPClient
-
-        http.begin(HOST_GATEWAY);      //Specify request destination
+        client->setFingerprint(fingerprint);
+        http.begin(*client, HOST_GATEWAY);      //Specify request destination
         http.addHeader("accept", "application/json");  //Specify content-type header
         http.addHeader("Content-Type", "application/json");  //Specify content-type header
 
@@ -50,9 +55,9 @@ public:
 
         Serial.println(httpCode);   //Print HTTP return code
         Serial.println(payload);    //Print request response payload
-        if (httpCode != 200) {
+        /*if (httpCode != 200) {
             errorCount++;
-        }
+        }*/
 
         http.end();  //Close connection
     }

@@ -46,7 +46,7 @@ void setupWifi(char * ssid, char * pwd)
 {
     WiFi.begin(ssid, pwd);   //WiFi connection
 
-    while (WiFi.status() != WL_CONNECTED) {  //Wait for the WiFI connection completion
+   while (WiFi.status() != WL_CONNECTED) {  //Wait for the WiFI connection completion
 
         delay(500);
         Serial.println("Waiting for connection");
@@ -78,6 +78,10 @@ bool readDHT()
   }
   gw.setTemperature(t);
   gw.setHumidity(h);
+  Serial.print(F("DHT t: "));
+  Serial.println(t);
+  Serial.print(F("DHT h: "));
+  Serial.println(h);
   return true;
 }
 
@@ -118,13 +122,14 @@ void loop()
     bool dht = readDHT();
     gw.run(&errorCount);
     checkErrors();
-
+/*
     if (updCount == 254) {
       updCount = 0;
       checkUpdates();
     } else {
       updCount++;
     }
+    */
   }
 
   errorCount = 0;
@@ -199,6 +204,11 @@ void commandProcessing()
     {
       Serial.println(F("Set auto calibration OFF..."));
       mhz.setAutoCalibration(false);
+    }
+    if (strcmp(_command, "RST") == 0)
+    {
+      Serial.println(F("Restart..."));
+      resetFunc();
     }
   }
 }
